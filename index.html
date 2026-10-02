@@ -1,0 +1,1135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GitAid — Git Rescue Guide: How to Undo Last Git Commit &amp; Fix Git Mistakes</title>
+<meta name="description" content="GitAid is a free git rescue guide that shows you exactly how to undo the last git commit, unstage files, recover deleted branches, and fix any git mistake — with danger-rated safe command sequences. Unlimited free usage, no signup.">
+<meta name="keywords" content="git undo commit, how to undo last git commit, git fix mistake, git revert commit, git reset soft vs hard, git unstage files, git recover deleted branch, git reflog">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      colors: {
+        kit: '#FFF6F4',
+        rescue: '#D7263D',
+        rescuedeep: '#A8182B',
+        teal2: '#1B998B',
+        ink: '#2E2A28'
+      },
+      fontFamily: {
+        display: ['"Barlow Condensed"', 'Arial Narrow', 'sans-serif'],
+        mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Consolas', 'monospace']
+      }
+    }
+  }
+}
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  body { -webkit-font-smoothing: antialiased; }
+  .cross-pattern {
+    background-color: #FFF6F4;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='72' height='72' viewBox='0 0 72 72'%3E%3Cpath d='M34 22h4v8h8v4h-8v8h-4v-8h-8v-4h8z' fill='%23D7263D' fill-opacity='0.05'/%3E%3C/svg%3E");
+  }
+  .tag-card { position: relative; }
+  .tag-stripe { border-right: 2px dashed rgba(0,0,0,0.12); }
+  .tag-hole {
+    width: 14px; height: 14px; border-radius: 9999px;
+    background: #FFF6F4;
+    box-shadow: inset 0 1px 3px rgba(0,0,0,0.25);
+  }
+  .cmd-block { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  .pill { font-size: 10px; letter-spacing: 0.12em; font-weight: 700; padding: 3px 9px; border-radius: 9999px; white-space: nowrap; }
+  .pill-green { background: #DEF7EC; color: #03543F; border: 1px solid #8ED0B7; }
+  .pill-yellow { background: #FDF3D7; color: #8A6D1B; border: 1px solid #E8C547; }
+  .pill-red { background: #FCE4E4; color: #A8182B; border: 1px solid #F08A8A; }
+  .qcard[aria-pressed="true"] { outline: 3px solid #D7263D; background: #fff; }
+  .qcard { transition: outline .15s ease, transform .15s ease; }
+  .qcard:hover { transform: translateY(-2px); }
+  @keyframes pulse-ring { 0% { box-shadow: 0 0 0 0 rgba(215,38,61,.45);} 70% { box-shadow: 0 0 0 14px rgba(215,38,61,0);} 100% { box-shadow: 0 0 0 0 rgba(215,38,61,0);} }
+  .panic-btn { animation: pulse-ring 2.2s infinite; }
+  .check-step.done { opacity: .55; }
+  .check-step.done .step-title { text-decoration: line-through; }
+  @media print { .no-print { display: none !important; } }
+</style>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "How do I undo the last git commit but keep my changes?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Run git reset --mixed HEAD~1 (or git reset HEAD~1, which is the same thing). This removes the last commit but leaves all your changes in the working directory as unstaged files, so nothing is lost. If you want to keep the changes staged instead, use git reset --soft HEAD~1. Only use git reset --hard HEAD~1 if you want to permanently discard the changes — the --hard flag deletes them."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "How do I undo a git commit that I already pushed?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Use git revert followed by a normal push. First run git log --oneline to find the commit hash, then run git revert <commit-hash> to create a new commit that reverses its changes, and finally git push. This is safe for shared branches because it adds history instead of rewriting it. Never use git reset plus a force push on a branch your teammates use."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "How do I change the last commit message in git?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "If you have not pushed yet, run git commit --amend -m \"Your corrected message\". This rewrites the most recent commit with the new message. If you already pushed the commit, amending rewrites shared history, so you would need to force-push (preferably with git push --force-with-lease), and you should coordinate with anyone who may have pulled the old version."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "How do I recover a deleted git branch?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Deleted branches are usually recoverable because git keeps a local record of every ref movement in the reflog. Run git reflog --oneline to find the hash of the branch's old tip, then recreate the branch with git branch <branch-name> <hash> and switch to it with git switch <branch-name>. If the reflog does not show it, git fsck --lost-found can surface dangling commits to inspect."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "What is the difference between git reset --soft, --mixed, and --hard?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "All three undo commits by moving the branch pointer back, but they treat your changes differently. git reset --soft keeps your changes staged, git reset --mixed (the default) keeps your changes as unstaged files, and git reset --hard deletes all changes in the working tree and staging area. Think of it as a ladder: --soft is the gentlest, --hard is the most destructive, so always back up before using --hard."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Is GitAid free to use?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes. GitAid is completely free with unlimited usage. There is no signup, no paywall, no watermark, and no limit on how many rescue guides you generate. Everything runs in your browser, so your repository details never leave your device."
+      }
+    }
+  ]
+}
+</script>
+</head>
+<body id="top" class="cross-pattern text-ink">
+
+<!-- ============ STICKY HEADER ============ -->
+<header class="sticky top-0 z-50 bg-rescue shadow-lg">
+  <div class="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+    <a href="#top" class="flex items-center gap-2.5" aria-label="GitAid home">
+      <span class="w-9 h-9 rounded-lg bg-white flex items-center justify-center shadow">
+        <svg class="w-6 h-6" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6v6h6v6h-6v6H9v-6H3V9h6z" fill="#D7263D"/></svg>
+      </span>
+      <span class="font-display text-3xl font-bold text-white tracking-wide">Git<span class="text-white/90">Aid</span></span>
+      <span class="hidden sm:inline-block text-[10px] font-bold tracking-[0.2em] text-white/80 border border-white/40 rounded px-1.5 py-0.5 mt-1">FIRST AID</span>
+    </a>
+    <nav class="flex items-center gap-5 sm:gap-8 text-sm font-semibold">
+      <a href="#top" class="text-white hover:text-white/80 transition">Home</a>
+      <a href="https://fixoraa.tech" class="text-white hover:text-white/80 transition">More Tools</a>
+    </nav>
+  </div>
+</header>
+
+<!-- ============ HERO ============ -->
+<section class="bg-rescue border-t border-white/20">
+  <div class="max-w-6xl mx-auto px-4 sm:px-6 py-10 sm:py-14 text-center">
+    <div class="inline-flex items-center gap-2 bg-white/15 border border-white/30 rounded-full px-4 py-1.5 mb-5">
+      <span class="w-2.5 h-2.5 rounded-full bg-white animate-pulse"></span>
+      <span class="text-xs font-bold tracking-[0.22em] text-white">EMERGENCY TRIAGE FOR GIT</span>
+    </div>
+    <h1 class="font-display text-4xl sm:text-6xl font-bold text-white leading-none tracking-wide">FIRST AID FOR GIT DISASTERS</h1>
+    <p class="mt-4 text-white/90 text-base sm:text-lg max-w-2xl mx-auto">Made a git mistake? Don't panic. Answer two questions and GitAid prescribes the exact safe command sequence — every command danger-rated, with a safety net built in.</p>
+    <div class="mt-6 flex flex-wrap justify-center gap-2.5 text-xs font-bold">
+      <span class="pill pill-red !text-[11px] !py-1.5 !px-3.5 bg-white/95">RED — DANGEROUS</span>
+      <span class="pill pill-yellow !text-[11px] !py-1.5 !px-3.5 bg-white/95">YELLOW — CAUTION</span>
+      <span class="pill pill-green !text-[11px] !py-1.5 !px-3.5 bg-white/95">GREEN — SAFE</span>
+    </div>
+    <div class="mt-6 inline-flex items-center gap-2 bg-white rounded-full px-5 py-2 shadow">
+      <svg class="w-4 h-4 text-teal2" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+      <span class="text-sm font-bold text-rescue tracking-wide">Unlimited Free Usage</span>
+      <span class="text-xs text-ink/60">· no signup · no paywall · no watermark</span>
+    </div>
+  </div>
+</section>
+
+<!-- TOP AD (verbatim) -->
+<div class="no-print mx-auto max-w-6xl px-4 sm:px-6 pt-4" role="complementary" aria-label="Advertisement">
+  <div class="mx-auto text-center" style="max-width:728px">
+    <span class="block text-[10px] tracking-[0.18em] uppercase text-slate-400 mb-1.5">Advertisement</span>
+    <div class="flex justify-center overflow-hidden">
+      <div class="origin-top scale-[0.44] sm:scale-100 shrink-0">
+        <script>
+          atOptions = { 'key' : '4e68ac77881c17fe128a46565d9a4e8c', 'format' : 'iframe', 'height' : 90, 'width' : 728, 'params' : {} };
+        </script>
+        <script src="https://www.highrevenueformat.com/4e68ac77881c17fe128a46565d9a4e8c/invoke.js"></script>
+      </div>
+    </div>
+  </div>
+</div>
+
+<main class="max-w-6xl mx-auto px-4 sm:px-6">
+
+  <!-- ============ TRIAGE WIZARD ============ -->
+  <section id="triage" class="mt-8 bg-white rounded-2xl shadow-xl border border-rescue/15 overflow-hidden">
+    <div class="bg-ink px-5 sm:px-8 py-4 flex items-center gap-3">
+      <span class="w-8 h-8 rounded-full bg-rescue text-white font-display font-bold text-lg flex items-center justify-center">1</span>
+      <h2 class="font-display text-2xl sm:text-3xl font-semibold text-white tracking-wide">EMERGENCY TRIAGE</h2>
+      <span class="ml-auto text-[11px] font-bold tracking-[0.18em] text-white/60 hidden sm:block">2 QUESTIONS → PRESCRIPTION</span>
+    </div>
+    <div class="p-5 sm:p-8">
+      <p class="text-sm text-ink/70 mb-5">Tap one answer per question. GitAid diagnoses the situation and writes you a safe, step-by-step command prescription.</p>
+
+      <h3 class="font-display text-xl font-semibold tracking-wide mb-3"><span class="text-rescue">Q1.</span> Is your change <span class="underline decoration-rescue/40">committed</span>?</h3>
+      <div class="grid sm:grid-cols-3 gap-3 mb-7" id="q-committed" role="group" aria-label="Is your change committed?">
+        <button type="button" data-val="no" aria-pressed="false" class="qcard text-left bg-kit border border-ink/10 rounded-xl p-4">
+          <span class="font-bold text-teal2">Not committed</span>
+          <span class="block text-xs text-ink/60 mt-1">Changes are only in your working files / staging area.</span>
+        </button>
+        <button type="button" data-val="yes" aria-pressed="false" class="qcard text-left bg-kit border border-ink/10 rounded-xl p-4">
+          <span class="font-bold text-rescue">Committed</span>
+          <span class="block text-xs text-ink/60 mt-1">You ran <span class="font-mono">git commit</span> already.</span>
+        </button>
+        <button type="button" data-val="unsure" aria-pressed="false" class="qcard text-left bg-kit border border-ink/10 rounded-xl p-4">
+          <span class="font-bold text-ink">Not sure</span>
+          <span class="block text-xs text-ink/60 mt-1">We'll run read-only checks to find out.</span>
+        </button>
+      </div>
+
+      <h3 class="font-display text-xl font-semibold tracking-wide mb-3"><span class="text-rescue">Q2.</span> Has it been <span class="underline decoration-rescue/40">pushed</span> to the remote?</h3>
+      <div class="grid sm:grid-cols-2 gap-3 mb-6" id="q-pushed" role="group" aria-label="Has it been pushed?">
+        <button type="button" data-val="no" aria-pressed="false" class="qcard text-left bg-kit border border-ink/10 rounded-xl p-4">
+          <span class="font-bold text-teal2">Not pushed</span>
+          <span class="block text-xs text-ink/60 mt-1">Only on your machine. History is yours to reshape.</span>
+        </button>
+        <button type="button" data-val="yes" aria-pressed="false" class="qcard text-left bg-kit border border-ink/10 rounded-xl p-4">
+          <span class="font-bold text-rescue">Pushed</span>
+          <span class="block text-xs text-ink/60 mt-1">On GitHub / GitLab / the remote. Others may have it.</span>
+        </button>
+      </div>
+
+      <p id="triage-hint" class="text-sm font-medium text-rescue bg-rescue/5 border border-rescue/25 rounded-lg px-4 py-3">Please answer both questions above — then your prescription appears here.</p>
+
+      <div id="triage-result" class="hidden"></div>
+    </div>
+  </section>
+
+  <!-- ============ PANIC BUTTON ============ -->
+  <section id="panic" class="mt-8 bg-white rounded-2xl shadow-xl border border-rescue/15 overflow-hidden">
+    <div class="bg-rescue px-5 sm:px-8 py-4 flex items-center gap-3">
+      <span class="w-8 h-8 rounded-full bg-white text-rescue font-display font-bold text-lg flex items-center justify-center">2</span>
+      <h2 class="font-display text-2xl sm:text-3xl font-semibold text-white tracking-wide">PANIC BUTTON</h2>
+      <span class="ml-auto text-[11px] font-bold tracking-[0.18em] text-white/70 hidden sm:block">REFLOG RESCUE RECIPES</span>
+    </div>
+    <div class="p-5 sm:p-8">
+      <p class="text-sm text-ink/70 mb-5">Lost something? Pick the emergency. Each recipe walks you through reading your reflog and restoring what you lost — step by step.</p>
+      <div class="grid sm:grid-cols-3 gap-3" id="panic-buttons">
+        <button type="button" data-kind="lost-commits" class="panic-btn bg-rescue hover:bg-rescuedeep text-white font-display text-xl font-semibold tracking-wide rounded-xl px-4 py-5 transition">I LOST MY COMMITS</button>
+        <button type="button" data-kind="deleted-branch" class="panic-btn bg-rescue hover:bg-rescuedeep text-white font-display text-xl font-semibold tracking-wide rounded-xl px-4 py-5 transition">I DELETED A BRANCH</button>
+        <button type="button" data-kind="bad-rebase" class="panic-btn bg-rescue hover:bg-rescuedeep text-white font-display text-xl font-semibold tracking-wide rounded-xl px-4 py-5 transition">BAD REBASE</button>
+      </div>
+      <div id="panic-flow" class="hidden mt-6"></div>
+    </div>
+  </section>
+
+  <!-- ============ SCENARIO TRIAGE TAGS ============ -->
+  <section id="scenarios" class="mt-8">
+    <div class="bg-white rounded-2xl shadow-xl border border-rescue/15 overflow-hidden">
+      <div class="bg-ink px-5 sm:px-8 py-4 flex items-center gap-3">
+        <span class="w-8 h-8 rounded-full bg-teal2 text-white font-display font-bold text-lg flex items-center justify-center">3</span>
+        <h2 class="font-display text-2xl sm:text-3xl font-semibold text-white tracking-wide">TRIAGE TAGS — 12 COMMON EMERGENCIES</h2>
+      </div>
+      <div class="p-5 sm:p-8">
+        <div class="flex flex-col sm:flex-row sm:items-center gap-3 mb-6">
+          <p class="text-sm text-ink/70 sm:flex-1">Tap a tag to open its guided fix flow. Tags are color-coded like hospital triage.</p>
+          <label class="relative block sm:w-72">
+            <span class="sr-only">Search emergencies</span>
+            <input id="scenario-search" type="search" placeholder="Search: e.g. message, push, merge…" class="w-full rounded-lg border border-ink/20 bg-kit px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-rescue/60" autocomplete="off">
+          </label>
+        </div>
+        <div id="recently-viewed" class="hidden mb-6">
+          <p class="text-[11px] font-bold tracking-[0.18em] text-ink/50 mb-2">RECENTLY VIEWED</p>
+          <div id="recent-chips" class="flex flex-wrap gap-2"></div>
+        </div>
+        <div id="scenario-grid" class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+        <p id="no-scenarios" class="hidden text-sm text-ink/60 text-center py-8">No emergency matches that search — try "commit", "push", "merge", or "branch".</p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- SCENARIO MODAL -->
+<div id="modal" class="hidden fixed inset-0 z-[60] no-print" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+  <div id="modal-backdrop" class="absolute inset-0 bg-ink/60"></div>
+  <div class="absolute inset-x-0 top-[4%] sm:top-[6%] mx-auto w-[94%] sm:w-[88%] max-w-2xl max-h-[88vh] overflow-y-auto bg-white rounded-2xl shadow-2xl">
+    <div id="modal-body" class="p-5 sm:p-8"></div>
+  </div>
+</div>
+
+<!-- BOTTOM AD (verbatim) -->
+<div class="no-print mx-auto max-w-6xl px-4 sm:px-6 pb-4" role="complementary" aria-label="Advertisement">
+  <div class="mx-auto text-center" style="max-width:728px">
+    <span class="block text-[10px] tracking-[0.18em] uppercase text-slate-400 mb-1.5">Advertisement</span>
+    <div class="flex justify-center overflow-hidden">
+      <script async src="https://js.wpadmngr.com/static/adManager.js" data-admpid="464498"></script>
+    </div>
+  </div>
+</div>
+
+<!-- ============ SEO ARTICLE ============ -->
+  <div class="mx-auto text-center" style="max-width:728px">
+    <span class="block text-[10px] tracking-[0.18em] uppercase text-slate-400 mb-1.5">Advertisement</span>
+    <div class="flex justify-center overflow-hidden">
+      <script async src="https://js.wpadmngr.com/static/adManager.js" data-admpid="464498"></script>
+    </div>
+  </div>
+</div>
+
+<!-- ============ SEO ARTICLE ============ -->
+<article class="max-w-3xl mx-auto px-4 sm:px-6 mt-10 text-ink/85 leading-relaxed text-[15px]">
+
+  <h2 class="font-display text-3xl font-semibold tracking-wide mt-2 mb-4">How to Undo the Last Git Commit (and Fix Any Git Mistake) — The Complete GitAid Guide</h2>
+
+  <p class="mb-4">Every developer has that moment: you hit enter on a commit and instantly know something is wrong. The message has a typo, a debug file snuck in, the commit landed on the wrong branch — or it should never have existed at all. The good news is that git almost never truly loses your work. The bad news is that the command that fixes one mistake can create a bigger one if you pick the wrong one. This guide teaches you exactly how to undo the last git commit, how to undo a commit you already pushed, and how to recover from the most common git emergencies, with every command rated green, yellow, or red for danger.</p>
+
+  <h3 class="font-display text-2xl font-semibold tracking-wide mt-8 mb-3">How to undo the last git commit (the three safe ways)</h3>
+  <p class="mb-4">If you are searching for "how to undo last git commit", you want one of three commands. All three move your branch pointer back by one commit, but they treat your changes very differently. <strong>git reset --soft HEAD~1</strong> removes the commit and keeps everything staged, exactly as it was right before you committed — this is the gentlest option. <strong>git reset --mixed HEAD~1</strong> (or just git reset HEAD~1, since --mixed is the default) removes the commit and returns your changes to the working directory as unstaged files. For most people, this is the right answer to "git undo commit": your code is back in your editor, nothing is staged, and nothing is deleted. <strong>git reset --hard HEAD~1</strong> removes the commit AND permanently deletes all of its changes. It is the only one of the three that destroys work, which is why GitAid tags it red. A reliable rule: try --mixed first. You can always delete files afterward, but you can never undelete with --hard unless you made a backup branch first.</p>
+  <p class="mb-4">One more detail worth knowing: these commands only rewrite local history, so they are perfectly safe as long as you have not pushed. The moment a commit is on the remote, other developers may have pulled it, and rewriting it can desync their copies. That is the single most important line in git safety, and it leads directly to the next section.</p>
+
+  <h3 class="font-display text-2xl font-semibold tracking-wide mt-8 mb-3">How to undo a commit you already pushed</h3>
+  <p class="mb-4">The moment a bad commit is pushed, the playbook changes. Do not use git reset, and definitely do not reach for push --force on a shared branch. Instead, use <strong>git revert</strong>. Run git log --oneline to find the commit hash, then run git revert &lt;commit-hash&gt;. Git creates a brand-new commit that applies the exact inverse of the bad one — if the bad commit added three lines, the revert removes those three lines. Your history stays linear, honest, and reviewable, and a plain git push publishes the fix. Teammates pull normally and nothing breaks. If the commit you want to undo is the newest one, git revert HEAD is the shortcut. The only common exception is a feature branch that only you use: there, after an amend or rebase, git push --force-with-lease is acceptable, because the --with-lease flag aborts if anyone pushed in the meantime. Bare --force has no such guard, which is why it is red-tagged in every GitAid prescription.</p>
+
+  <h3 class="font-display text-2xl font-semibold tracking-wide mt-8 mb-3">Fix the last commit message or add a forgotten file</h3>
+  <p class="mb-4">Two of the most-googled git fixes are variations of the same idea: the commit is fine, but something about it is wrong. To change the last commit message before pushing, run git commit --amend -m "Your corrected message". To fold a forgotten file into the last commit, stage it first with git add, then run git commit --amend --no-edit. Both rewrite the most recent commit, which is completely safe locally — but remember the pushed rule: if the commit is already on the remote, amending rewrites history that others may have pulled. For a file that should never have been committed at all (a build artifact, a log file, an environment file), the clean sequence is git reset --soft HEAD~1, then git restore --staged &lt;file&gt; to pull just that file out of staging, then re-commit. And if the leaked file was a secret that was ever pushed, cleaning the commit is not enough: rotate the credential immediately, because history rewriting cannot un-publish what is already on the remote.</p>
+
+  <h3 class="font-display text-2xl font-semibold tracking-wide mt-8 mb-3">Committed to the wrong branch</h3>
+  <p class="mb-4">This happens to everyone: you meant to work on feature-x but committed on main. The fix has three steps and loses nothing. First, create the correct branch where you are: git branch feature-x. This captures your current commit — your work is now safe on the new branch. Second, move the wrong branch back with git reset --hard HEAD~1 (repeat for each accidental commit, checking git log first). Third, switch to the new branch with git switch feature-x. Because step one saved everything, the --hard reset in step two is safe — but only if those commits were never pushed on the wrong branch. If they were pushed, use git revert on the wrong branch instead. The prevention is a one-second habit: run git branch --show-current, or put the branch name in your shell prompt, before every commit.</p>
+
+  <h3 class="font-display text-2xl font-semibold tracking-wide mt-8 mb-3">Unstaging, discarding, and the staging-area ladder</h3>
+  <p class="mb-4">Git has three layers — working directory, staging area, and committed history — and each layer has its own undo tool. To unstage a file while keeping your edits, use git restore --staged &lt;file&gt; (green-tagged: it never deletes anything). To throw away uncommitted edits in a tracked file, use git restore &lt;file&gt; (red-tagged: the edits are gone for good, so read git diff first). To park work-in-progress safely while you experiment, use git stash push -m "before-fix" and bring it back with git stash pop. Thinking in layers makes every "git fix mistake" search answer itself: ask which layer the mistake lives in, then use that layer's tool. Working directory → git restore. Staging area → git restore --staged. Local commits → git reset / git commit --amend. Pushed commits → git revert. Anything that looks lost → git reflog.</p>
+
+  <h3 class="font-display text-2xl font-semibold tracking-wide mt-8 mb-3">The reflog: git's built-in time machine</h3>
+  <p class="mb-4">The reflog is the single most underused rescue tool in git. Every time a branch pointer moves — a commit, a reset, a rebase, a merge, a branch deletion — git writes the old position into the reflog and keeps it for about 90 days. That means a git reset --hard that "deleted" your commits did not delete them: they are sitting in the reflog waiting to be found. Run git reflog --oneline and read it newest-first. Find your lost commit message or the line that says "reset: moving to..." — the entries just before that line are your lost work. Then save it with git branch rescue-lost &lt;hash&gt;. Deleted branches recover the same way: find the old tip hash and run git branch &lt;branch-name&gt; &lt;hash&gt;. A botched rebase is even easier, because git automatically saves your pre-rebase state as ORIG_HEAD: git reset --hard ORIG_HEAD restores it in one command. Three rules keep the time machine working: stop committing the moment you notice a loss, never run git gc --prune, and remember the reflog is local-only — recovery must happen on the machine where the mistake occurred.</p>
+
+  <h3 class="font-display text-2xl font-semibold tracking-wide mt-8 mb-3">Red-tagged commands: respect the danger ratings</h3>
+  <p class="mb-4">GitAid rates every command it prescribes. Green commands are read-only or non-destructive — git status, git log, git reflog, git diff, git stash push — safe to run any time, even when you are panicking. Yellow commands undo or rewrite work — git reset --mixed, git revert, git commit --amend — safe when you understand exactly what they do, which is why each one ships with a plain-English explanation. Red commands destroy work or rewrite shared history — git reset --hard, git push --force, git clean -fd, git branch -D. They are not forbidden; they are sometimes exactly what you need. But every red command in a GitAid prescription automatically triggers a safety net: create a backup branch with git branch rescue-backup first. A branch costs nothing, takes a second, and turns an irreversible mistake into a reversible one. Developers who build this habit simply stop losing work.</p>
+
+  <h3 class="font-display text-2xl font-semibold tracking-wide mt-8 mb-3">The triage mindset: diagnose before you operate</h3>
+  <p class="mb-4">Emergency rooms triage before they treat, and git rescue works the same way. Before running any fix, answer two questions: is the change committed, and has it been pushed? Those two answers determine everything — they are the difference between a one-command local reset and a careful revert on a shared branch. That is why GitAid opens with a triage wizard instead of a search box: most git disasters look identical on the surface ("my code is wrong") but need opposite treatments underneath. Diagnose first with read-only commands, pick the prescription that matches your exact situation, make a backup when anything is red-tagged, and verify with git log and git status after every step. Do that consistently, and no git mistake will ever scare you again.</p>
+  <p class="mb-4">Still stuck? Scroll back up, answer the two triage questions, and let GitAid write your prescription. Every flow on this page is free, unlimited, and runs entirely in your browser — your repository never leaves your machine.</p>
+</article>
+
+<!-- ============ FAQ ============ -->
+<section class="max-w-3xl mx-auto px-4 sm:px-6 mt-12">
+  <h2 class="font-display text-3xl font-semibold tracking-wide mb-6 text-center">FREQUENTLY ASKED QUESTIONS</h2>
+  <div class="space-y-4">
+    <details class="bg-white rounded-xl border border-ink/10 shadow-sm px-5 py-4">
+      <summary class="font-semibold cursor-pointer">How do I undo the last git commit but keep my changes?</summary>
+      <p class="text-sm text-ink/75 mt-2 leading-relaxed">Run <span class="font-mono">git reset --mixed HEAD~1</span> (or <span class="font-mono">git reset HEAD~1</span>, which is the same thing). This removes the last commit but leaves all your changes in the working directory as unstaged files, so nothing is lost. If you want to keep the changes staged instead, use <span class="font-mono">git reset --soft HEAD~1</span>. Only use <span class="font-mono">git reset --hard HEAD~1</span> if you want to permanently discard the changes — the <span class="font-mono">--hard</span> flag deletes them.</p>
+    </details>
+    <details class="bg-white rounded-xl border border-ink/10 shadow-sm px-5 py-4">
+      <summary class="font-semibold cursor-pointer">How do I undo a git commit that I already pushed?</summary>
+      <p class="text-sm text-ink/75 mt-2 leading-relaxed">Use <span class="font-mono">git revert</span> followed by a normal push. First run <span class="font-mono">git log --oneline</span> to find the commit hash, then run <span class="font-mono">git revert &lt;commit-hash&gt;</span> to create a new commit that reverses its changes, and finally <span class="font-mono">git push</span>. This is safe for shared branches because it adds history instead of rewriting it. Never use <span class="font-mono">git reset</span> plus a force push on a branch your teammates use.</p>
+    </details>
+    <details class="bg-white rounded-xl border border-ink/10 shadow-sm px-5 py-4">
+      <summary class="font-semibold cursor-pointer">How do I change the last commit message in git?</summary>
+      <p class="text-sm text-ink/75 mt-2 leading-relaxed">If you have not pushed yet, run <span class="font-mono">git commit --amend -m "Your corrected message"</span>. This rewrites the most recent commit with the new message. If you already pushed the commit, amending rewrites shared history, so you would need to force-push (preferably with <span class="font-mono">git push --force-with-lease</span>), and you should coordinate with anyone who may have pulled the old version.</p>
+    </details>
+    <details class="bg-white rounded-xl border border-ink/10 shadow-sm px-5 py-4">
+      <summary class="font-semibold cursor-pointer">How do I recover a deleted git branch?</summary>
+      <p class="text-sm text-ink/75 mt-2 leading-relaxed">Deleted branches are usually recoverable because git keeps a local record of every ref movement in the reflog. Run <span class="font-mono">git reflog --oneline</span> to find the hash of the branch's old tip, then recreate the branch with <span class="font-mono">git branch &lt;branch-name&gt; &lt;hash&gt;</span> and switch to it with <span class="font-mono">git switch &lt;branch-name&gt;</span>. If the reflog does not show it, <span class="font-mono">git fsck --lost-found</span> can surface dangling commits to inspect.</p>
+    </details>
+    <details class="bg-white rounded-xl border border-ink/10 shadow-sm px-5 py-4">
+      <summary class="font-semibold cursor-pointer">What is the difference between git reset --soft, --mixed, and --hard?</summary>
+      <p class="text-sm text-ink/75 mt-2 leading-relaxed">All three undo commits by moving the branch pointer back, but they treat your changes differently. <span class="font-mono">git reset --soft</span> keeps your changes staged, <span class="font-mono">git reset --mixed</span> (the default) keeps your changes as unstaged files, and <span class="font-mono">git reset --hard</span> deletes all changes in the working tree and staging area. Think of it as a ladder: --soft is the gentlest, --hard is the most destructive, so always back up before using --hard.</p>
+    </details>
+    <details class="bg-white rounded-xl border border-ink/10 shadow-sm px-5 py-4">
+      <summary class="font-semibold cursor-pointer">Is GitAid free to use?</summary>
+      <p class="text-sm text-ink/75 mt-2 leading-relaxed">Yes. GitAid is completely free with unlimited usage. There is no signup, no paywall, no watermark, and no limit on how many rescue guides you generate. Everything runs in your browser, so your repository details never leave your device.</p>
+    </details>
+  </div>
+</section>
+
+<footer class="mt-14 bg-ink text-white/70">
+  <div class="max-w-6xl mx-auto px-4 sm:px-6 py-8 flex flex-col sm:flex-row items-center gap-4">
+    <div class="flex items-center gap-2.5">
+      <span class="w-8 h-8 rounded-lg bg-white flex items-center justify-center">
+        <svg class="w-5 h-5" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6v6h6v6h-6v6H9v-6H3V9h6z" fill="#D7263D"/></svg>
+      </span>
+      <span class="font-display text-2xl font-bold text-white tracking-wide">GitAid</span>
+    </div>
+    <p class="text-xs sm:ml-auto text-center sm:text-right">First aid for git disasters. Free forever — unlimited usage, no signup.<br class="sm:hidden"> Run the commands in your own terminal; GitAid never touches your repository.</p>
+  </div>
+</footer>
+
+<script id="gitaid-git-rescue-guide-lib">
+/* GitAid — Git Rescue Triage Wizard logic.
+ * Pure functions only: no DOM, no browser globals, no client-side storage.
+ * Shipped inside <script id="gitaid-git-rescue-guide-lib"> in gitaid-git-rescue-guide.html.
+ * Tests eval this exact block from the finished HTML.
+ */
+'use strict';
+
+/* ---------------- Danger ratings ----------------
+ * green  = read-only or non-destructive (safe to run anytime)
+ * yellow = rewrites or undoes work (safe when you understand it)
+ * red    = destroys work or rewrites shared history (backup first)
+ */
+function dangerRating(cmd){
+  var c = ' ' + String(cmd || '').toLowerCase().replace(/<[^>]*>/g, ' ').trim() + ' ';
+  if (/--force-with-lease/.test(c)) return 'yellow';
+  var red = [
+    /reset\s+--hard/,
+    /push[^&|;]*--force\b/,
+    /checkout\s+--[ ]/,
+    /checkout\s+\S+\s+--[ ]/,
+    /clean\s+(-[a-z]*f|--force)/,
+    /\bbranch\s+-d\b/,
+    /\brebase\b/,
+    /filter-branch/,
+    /filter-repo/,
+    /\brm\b/,
+    /stash\s+(drop|clear)\b/,
+    /gc\s+--prune/,
+    /restore\s+--source/
+  ];
+  for (var i = 0; i < red.length; i++){ if (red[i].test(c)) return 'red'; }
+  var green = [
+    /\bstatus\b/, /\blog\b/, /\breflog\b/, /\bdiff\b/, /\bshow\b/,
+    /\bstash\s+list\b/, /\bstash\s+push\b/, /\bfetch\b/, /\bremote\b/,
+    /\bbisect\b/, /\bgrep\b/, /\bblame\b/, /\bfsck\b/,
+    /\bbranch\s*$/,
+    /\bcheckout\s+-b\b/, /\bswitch\s+-c\b/
+  ];
+  for (var j = 0; j < green.length; j++){ if (green[j].test(c)) return 'green'; }
+  return 'yellow';
+}
+
+function severityInfo(level){
+  if (level === 'red')    return { level: 'red',    label: 'DANGEROUS', short: 'RED',    hint: 'Can permanently destroy work or rewrite shared history. Make a backup first.' };
+  if (level === 'yellow') return { level: 'yellow', label: 'CAUTION',   short: 'YELLOW', hint: 'Undoes or rewrites work. Safe when you know exactly what it does.' };
+  return { level: 'green', label: 'SAFE', short: 'GREEN', hint: 'Read-only or non-destructive. Safe to run anytime.' };
+}
+
+/* Automatic safety-net suggestion for yellow/red steps. */
+function safetyNetFor(danger){
+  if (danger === 'red'){
+    return 'Safety net: create a backup branch BEFORE running red-tagged commands: git branch rescue-backup — it costs nothing and can save your work.';
+  }
+  if (danger === 'yellow'){
+    return 'Safety check: run git status first and stash anything precious with git stash push -m "before-fix" before yellow-tagged commands.';
+  }
+  return null;
+}
+
+/* ---------------- Triage wizard ----------------
+ * triageFlow(committed, pushed)
+ *   committed: 'no' | 'yes' | 'unsure'   ("Is your change committed?")
+ *   pushed:    'no' | 'yes'               ("Has it been pushed?")
+ * Returns { title, summary, severity, caution, steps:[{cmd, why}] }
+ */
+function triageFlow(committed, pushed){
+  var com = String(committed || 'unsure').toLowerCase();
+  var psh = String(pushed || 'no').toLowerCase();
+
+  if (com === 'no'){
+    return {
+      title: 'Nothing committed yet — your work is recoverable',
+      summary: 'Because nothing is committed, no git history is involved. ' +
+        'Everything you need lives in your working directory and staging area, ' +
+        (psh === 'yes'
+          ? 'and your pushed commits are completely untouched by what happens next.'
+          : 'so the fix is quick and safe.'),
+      severity: 'green',
+      caution: null,
+      steps: [
+        { cmd: 'git status', why: 'See exactly what is modified, staged, or untracked right now.' },
+        { cmd: 'git diff', why: 'Review unstaged changes before touching anything.' },
+        { cmd: 'git diff --staged', why: 'Review staged changes separately, so nothing surprises you.' },
+        { cmd: 'git stash push -m "before-fix"', why: 'Park all changes in a safe stash so you can experiment without fear.' },
+        { cmd: 'git stash pop', why: 'Bring the changes back when you are ready to continue. Use this as your undo.' }
+      ]
+    };
+  }
+
+  if (com === 'yes' && psh === 'yes'){
+    return {
+      title: 'Committed AND pushed — do NOT rewrite history',
+      summary: 'Once a commit is pushed, other people may have pulled it. Rewriting it with ' +
+        'reset + force-push can corrupt your teammates\u2019 copies. The safe fix is git revert, ' +
+        'which adds a new commit that undoes the old one — history stays honest.',
+      severity: 'yellow',
+      caution: 'Never use git reset + push --force on a branch other people use. Use git revert instead.',
+      steps: [
+        { cmd: 'git log --oneline -5', why: 'Confirm the commit you want to undo is the newest one (top of the list).' },
+        { cmd: 'git revert HEAD', why: 'Creates a new commit that undoes the last commit. Safe for shared branches.' },
+        { cmd: 'git log --oneline -3', why: 'Verify the revert commit is on top and the history looks right.' },
+        { cmd: 'git push', why: 'Publish the revert so everyone gets the fix.' }
+      ]
+    };
+  }
+
+  if (com === 'yes' && psh === 'no'){
+    return {
+      title: 'Committed but not pushed — easy, history is yours',
+      summary: 'Local-only commits can be reshaped freely because nobody else has them. ' +
+        'The default safe move keeps your changes as normal unstaged files.',
+      severity: 'yellow',
+      caution: 'Pick the undo mode that matches what you want: keep changes (--mixed) or destroy them (--hard, red-tagged).',
+      steps: [
+        { cmd: 'git log --oneline -3', why: 'Double-check which commit you are about to undo.' },
+        { cmd: 'git branch rescue-backup', why: 'One-click insurance: saves your exact current state on a new branch.' },
+        { cmd: 'git reset --mixed HEAD~1', why: 'Undoes the last commit but keeps your changes as unstaged files. Nothing is lost.' },
+        { cmd: 'git status', why: 'Confirm your files are back and nothing vanished.' },
+        { cmd: 'git add <file> && git commit -m "Better message"', why: 'Re-commit the way you actually want it.' }
+      ]
+    };
+  }
+
+  /* com === 'unsure' */
+  return {
+    title: 'Not sure where your change is — diagnose first',
+    summary: 'Run these read-only commands (all green-tagged). They never change anything. ' +
+      'Then answer the wizard again with what you found.',
+    severity: 'green',
+    caution: null,
+    steps: [
+      { cmd: 'git status', why: 'Shows uncommitted changes. If you see "nothing to commit", your change is committed.' },
+      { cmd: 'git log --oneline -5', why: 'Shows your recent commits. The newest is the one at risk.' },
+      { cmd: 'git status -sb', why: 'Shows whether your branch is ahead of the remote (ahead = committed but not pushed).' }
+    ]
+  };
+}
+
+/* ---------------- Scenario library (12) ---------------- */
+function scenarioData(){
+  return [
+    {
+      id: 'undo-last-commit-keep',
+      title: 'Undo the last commit, keep the changes',
+      severity: 'yellow',
+      symptom: 'You committed too early / the message is wrong / you want the changes back as editable files.',
+      steps: [
+        { cmd: 'git log --oneline -2', why: 'Confirm the commit you want to undo is the latest one.' },
+        { cmd: 'git reset --mixed HEAD~1', why: 'Removes the commit but keeps all changes as unstaged files.' },
+        { cmd: 'git status', why: 'Verify your files are back in the working directory.' }
+      ],
+      caution: 'Do NOT use --hard here — it would delete the changes you want to keep.',
+      prevention: 'Commit in small steps and review git status before every commit.'
+    },
+    {
+      id: 'undo-last-commit-discard',
+      title: 'Undo the last commit and throw everything away',
+      severity: 'red',
+      symptom: 'The last commit was a total mistake — the code, the files, all of it should never have existed.',
+      steps: [
+        { cmd: 'git branch rescue-backup', why: 'Backup first. Even "trash" is worth one branch until you are sure.' },
+        { cmd: 'git reset --hard HEAD~1', why: 'Removes the last commit AND deletes all of its changes from your working tree.' },
+        { cmd: 'git status', why: 'Confirm the tree is clean and history moved back one commit.' }
+      ],
+      caution: 'This permanently destroys uncommitted and committed work after this point. The backup branch is your only way back.',
+      prevention: 'Use git reset --mixed first; only go --hard when you are 100% sure.'
+    },
+    {
+      id: 'fix-last-commit-message',
+      title: 'Change the last commit message',
+      severity: 'green',
+      symptom: 'Typo in the message, or it does not describe the change well.',
+      steps: [
+        { cmd: 'git log -1 --format=%B', why: 'See the current message you want to fix.' },
+        { cmd: 'git commit --amend -m "Your corrected message"', why: 'Rewrites the last commit with the new message.' },
+        { cmd: 'git log -1 --oneline', why: 'Confirm the message now reads correctly.' }
+      ],
+      caution: 'Only safe if you have NOT pushed. After pushing, amend + push needs --force-with-lease.',
+      prevention: 'Write the message, read it once more, then commit.'
+    },
+    {
+      id: 'forgot-file-in-commit',
+      title: 'Add a forgotten file to the last commit',
+      severity: 'yellow',
+      symptom: 'You committed, then noticed one file was left out.',
+      steps: [
+        { cmd: 'git status', why: 'Spot the forgotten file sitting unstaged.' },
+        { cmd: 'git add forgotten-file.txt', why: 'Stage the file you meant to include.' },
+        { cmd: 'git commit --amend --no-edit', why: 'Folds it into the last commit without changing the message.' },
+        { cmd: 'git log --stat -1', why: 'Verify the file is now listed in the commit.' }
+      ],
+      caution: 'Only safe before pushing. After push, amend rewrites shared history.',
+      prevention: 'Always run git status right before committing.'
+    },
+    {
+      id: 'wrong-branch-commit',
+      title: 'Committed to the wrong branch',
+      severity: 'yellow',
+      symptom: 'You meant to work on feature-x but committed on main (or another branch).',
+      steps: [
+        { cmd: 'git log --oneline -2', why: 'Note how many commits you made on the wrong branch.' },
+        { cmd: 'git branch feature-x', why: 'Creates the correct branch pointing at your current commit — your work is now safe there.' },
+        { cmd: 'git reset --hard HEAD~1', why: 'Moves the wrong branch back, removing the commit from it. (Repeat ~N for N commits.)' },
+        { cmd: 'git switch feature-x', why: 'Jump to the correct branch — your commits are waiting there.' },
+        { cmd: 'git log --oneline -2', why: 'Confirm the commits live on feature-x and are gone from the wrong branch.' }
+      ],
+      caution: 'Only use the --hard reset on the wrong branch if it was NEVER pushed with those commits. If pushed, use git revert there instead.',
+      prevention: 'Check git branch --show-current before every commit, or set your prompt to show the branch.'
+    },
+    {
+      id: 'unstage-files',
+      title: 'Unstage files but keep your edits',
+      severity: 'green',
+      symptom: 'You staged files with git add but are not ready to commit them.',
+      steps: [
+        { cmd: 'git status', why: 'See which files are currently staged (green section).' },
+        { cmd: 'git restore --staged <file>', why: 'Unstages one file; your edits stay untouched in the working tree.' },
+        { cmd: 'git restore --staged .', why: 'Unstages everything at once when the whole add was premature.' },
+        { cmd: 'git status', why: 'Confirm files moved from staged back to unstaged.' }
+      ],
+      caution: 'Restore --staged never deletes your edits — it only removes them from the staging area.',
+      prevention: 'Stage deliberately: git add <specific-file> instead of git add -A.'
+    },
+    {
+      id: 'discard-file-changes',
+      title: 'Discard changes in a file',
+      severity: 'red',
+      symptom: 'You edited a tracked file and want to throw those edits away completely.',
+      steps: [
+        { cmd: 'git diff -- <file>', why: 'Read exactly what you are about to delete. Last chance to copy anything.' },
+        { cmd: 'git restore <file>', why: 'Throws away all uncommitted edits in that file, restoring the last committed version.' },
+        { cmd: 'git status', why: 'Confirm the file is no longer listed as modified.' }
+      ],
+      caution: 'Deleted edits cannot be recovered by git if they were never committed or stashed. This is the point of no return.',
+      prevention: 'Stash first (git stash push) when in doubt — you can always drop the stash later.'
+    },
+    {
+      id: 'remove-file-from-commit',
+      title: 'Remove a file from the last commit',
+      severity: 'yellow',
+      symptom: 'A debug file, build artifact, or private file got committed by accident.',
+      steps: [
+        { cmd: 'git reset --soft HEAD~1', why: 'Undoes the commit but keeps everything staged.' },
+        { cmd: 'git restore --staged <file>', why: 'Removes just the unwanted file from staging.' },
+        { cmd: 'git commit -m "Same message, without the file"', why: 'Re-creates the commit cleanly.' },
+        { cmd: 'git log --stat -1', why: 'Verify the file is gone from the commit.' }
+      ],
+      caution: 'If the file was a secret AND was pushed, removal is not enough — rotate the credential anyway.',
+      prevention: 'Maintain a solid .gitignore so junk files never reach git add.'
+    },
+    {
+      id: 'undo-pushed-commit',
+      title: 'Undo a commit that is already pushed',
+      severity: 'yellow',
+      symptom: 'The bad commit is on GitHub/GitLab/your remote — teammates may have it.',
+      steps: [
+        { cmd: 'git log --oneline -3', why: 'Identify the exact commit to undo.' },
+        { cmd: 'git revert <commit-hash>', why: 'Adds a NEW commit that reverses it. History stays linear and honest.' },
+        { cmd: 'git log --oneline -2', why: 'Confirm the revert commit sits on top.' },
+        { cmd: 'git push', why: 'Publish the revert with a normal push — no force needed.' }
+      ],
+      caution: 'NEVER git reset + push --force a shared branch. You will desync everyone who already pulled.',
+      prevention: 'Push only after reviewing: git log --stat -1 right before every push.'
+    },
+    {
+      id: 'undo-merge',
+      title: 'Undo a merge',
+      severity: 'yellow',
+      symptom: 'You merged the wrong branch, or the merge broke everything.',
+      steps: [
+        { cmd: 'git log --oneline -3', why: 'Find the merge commit (it says "Merge branch ...").' },
+        { cmd: 'git reset --hard ORIG_HEAD', why: 'ORIG_HEAD points to where you were right before the merge. One command undoes it.' },
+        { cmd: 'git log --oneline -2', why: 'Confirm the merge commit is gone and your pre-merge state is back.' }
+      ],
+      caution: 'ORIG_HEAD is overwritten by the next reset/merge/rebase. If it is gone, use git reflog to find the pre-merge commit.',
+      prevention: 'Merge with git merge --no-ff and review the branch with git log --oneline main..feature first.'
+    },
+    {
+      id: 'diverged-from-remote',
+      title: 'Local and remote have diverged',
+      severity: 'yellow',
+      symptom: 'git pull or git push fails: "your branch and origin have diverged" or "updates were rejected".',
+      steps: [
+        { cmd: 'git fetch origin', why: 'Download the remote state without touching your work.' },
+        { cmd: 'git log --oneline --graph --all -8', why: 'Visualize how your branch and origin diverged.' },
+        { cmd: 'git rebase origin/main', why: 'Replay your commits on top of the remote (clean history). Use git merge instead if you prefer merge commits.' },
+        { cmd: 'git push --force-with-lease', why: 'Only needed after a rebase. The --with-lease part aborts if someone pushed meanwhile.' }
+      ],
+      caution: 'Use --force-with-lease, never bare --force: it refuses to overwrite work you have not seen.',
+      prevention: 'Pull before you start work each day: git pull --rebase.'
+    },
+    {
+      id: 'committed-secret',
+      title: 'Committed a secret (.env, API key, token)',
+      severity: 'red',
+      symptom: 'A password, API key, or .env file landed in a commit. Possibly pushed.',
+      steps: [
+        { cmd: 'git log --oneline -3', why: 'Find how deep the secret is and whether it was pushed.' },
+        { cmd: 'git reset --soft HEAD~1', why: 'If NOT pushed and it is the latest commit: un-commit but keep files staged.' },
+        { cmd: 'git rm --cached .env', why: 'Stop tracking the secret file (keeps it on disk, removes from git).' },
+        { cmd: 'echo ".env" >> .gitignore', why: 'Make sure it can never be committed again.' },
+        { cmd: 'git commit -m "Remove leaked secret"', why: 'Re-commit cleanly.' }
+      ],
+      caution: 'If it was EVER pushed, treat the secret as compromised: rotate/revoke the key immediately. History rewriting cannot un-publish it.',
+      prevention: 'Add secrets to .gitignore on day one; use a pre-commit secret scanner.'
+    }
+  ];
+}
+
+function getScenario(id){
+  var list = scenarioData();
+  for (var i = 0; i < list.length; i++){
+    if (list[i].id === id) return list[i];
+  }
+  return null;
+}
+
+/* ---------------- Panic-button reflog recipes ---------------- */
+function reflogKinds(){
+  return ['lost-commits', 'deleted-branch', 'bad-rebase'];
+}
+
+function reflogRecipe(kind){
+  var k = String(kind || '').toLowerCase();
+
+  if (k === 'lost-commits'){
+    return {
+      id: 'lost-commits',
+      title: 'Lost commits rescue',
+      description: 'You ran git reset --hard, a bad amend, or commits just "disappeared". ' +
+        'Nothing is gone yet: git keeps every move in the reflog for ~90 days.',
+      rule: 'STOP: do not commit, do not run git gc, do not clone fresh. Every new commit pushes the lost ones deeper.',
+      steps: [
+        { cmd: 'git reflog --oneline -20', why: 'Lists every place HEAD has been. Newest first. Look for your commit messages or a "reset: moving to ..." line — the entries right BEFORE that line are your lost commits.' },
+        { cmd: 'git show <hash>', why: 'Inspect a candidate: its message, date, and diff. Make sure it is really your lost work.' },
+        { cmd: 'git branch rescue-lost <hash>', why: 'Save the lost commit on a brand-new branch. This alone is a full recovery of the code.' },
+        { cmd: 'git log --oneline rescue-lost -3', why: 'Verify the rescued branch contains the commits you lost.' }
+      ],
+      verify: 'Open the files on branch rescue-lost. If your work is there, merge or cherry-pick it back.',
+      caution: 'Reflog is local-only. Recovery must happen on the machine where the loss occurred.'
+    };
+  }
+
+  if (k === 'deleted-branch'){
+    return {
+      id: 'deleted-branch',
+      title: 'Deleted branch rescue',
+      description: 'You deleted a branch with git branch -D (or -d) before it was merged. ' +
+        'The commits survive in the reflog — you just need the old tip hash.',
+      rule: 'STOP: do not run git gc. The branch ref is gone, but the commits are still in your local object database.',
+      steps: [
+        { cmd: 'git reflog --oneline -30', why: 'Scan for the branch name or its last commit message. The hash next to it is the old branch tip.' },
+        { cmd: 'git reflog show <branch-name>', why: 'If the branch-specific reflog still exists, this shows its history directly.' },
+        { cmd: 'git branch <branch-name> <hash>', why: 'Recreates the branch at the exact commit where it used to point.' },
+        { cmd: 'git switch <branch-name>', why: 'Hop onto the restored branch.' },
+        { cmd: 'git log --oneline -5', why: 'Confirm all your commits are back on the branch.' }
+      ],
+      verify: 'If the reflog is empty, run git fsck --lost-found and inspect each "dangling commit" with git show until you find yours.',
+      caution: 'If you never committed the work (it was only staged/unstaged files), git cannot recover it. Check your editor history.'
+    };
+  }
+
+  if (k === 'bad-rebase'){
+    return {
+      id: 'bad-rebase',
+      title: 'Bad rebase rescue',
+      description: 'A rebase went wrong: conflicts everywhere, commits duplicated or missing. ' +
+        'Git saved your pre-rebase state automatically as ORIG_HEAD.',
+      rule: 'STOP: do not start another rebase or merge. ORIG_HEAD survives only until the next destructive operation.',
+      steps: [
+        { cmd: 'git rebase --abort', why: 'If the rebase is still in progress (git status says "rebase in progress"), this cancels it cleanly. Skip if already finished.' },
+        { cmd: 'git reset --hard ORIG_HEAD', why: 'ORIG_HEAD points to your branch tip from before the rebase. This single command restores it.' },
+        { cmd: 'git log --oneline -5', why: 'Confirm the pre-rebase history is back.' },
+        { cmd: 'git reflog --oneline -15', why: 'If ORIG_HEAD was already overwritten, find the "rebase (start)" entry here and reset to the commit right before it.' }
+      ],
+      verify: 'Diff against your expectations: git log --oneline should look exactly like it did before the rebase.',
+      caution: 'If you already force-pushed the rebased branch, teammates may have pulled the broken version — coordinate with them before fixing.'
+    };
+  }
+
+  return null;
+}
+
+</script>
+<script>
+/* GitAid UI wiring — DOM glue over the pure lib functions. */
+(function(){
+  'use strict';
+
+  function $(id){ return document.getElementById(id); }
+  function esc(s){
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  var copyTimers = {};
+  function copyText(text, btn){
+    function done(){
+      if (!btn) return;
+      var orig = btn.getAttribute('data-label') || 'Copy';
+      btn.innerHTML = 'Copied!';
+      clearTimeout(copyTimers[btn.id]);
+      copyTimers[btn.id] = setTimeout(function(){ btn.innerHTML = orig; }, 1400);
+    }
+    function fallback(){
+      var ta = document.createElement('textarea');
+      ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select();
+      try { document.execCommand('copy'); } catch(e){}
+      document.body.removeChild(ta); done();
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(text).then(done, fallback);
+    } else { fallback(); }
+  }
+
+  var copyN = 0;
+  function nextCopyId(){ copyN += 1; return 'copybtn-' + copyN; }
+
+  function pillHTML(level){
+    var info = severityInfo(level);
+    return '<span class="pill pill-' + info.level + '" title="' + esc(info.hint) + '">' + esc(info.label) + '</span>';
+  }
+
+  function cmdRow(step){
+    var danger = dangerRating(step.cmd);
+    var id = nextCopyId();
+    return '<div class="rounded-lg bg-ink text-white p-3 sm:p-4 mb-2.5">' +
+      '<div class="flex items-center gap-2 flex-wrap mb-1.5">' + pillHTML(danger) +
+      '<button type="button" id="' + id + '" data-label="Copy" data-cmd="' + esc(step.cmd) + '" ' +
+      'class="copy-btn ml-auto text-[11px] font-bold tracking-wider bg-white/10 hover:bg-white/20 border border-white/25 rounded px-2.5 py-1 transition">Copy</button></div>' +
+      '<code class="cmd-block block text-[13px] sm:text-sm text-emerald-200 break-all">$ ' + esc(step.cmd) + '</code>' +
+      (step.why ? '<p class="text-xs text-white/65 mt-1.5">' + esc(step.why) + '</p>' : '') +
+      '</div>';
+  }
+
+  function safetyBanner(steps){
+    var worst = 'green';
+    steps.forEach(function(s){
+      var d = dangerRating(s.cmd);
+      if (d === 'red') worst = 'red';
+      else if (d === 'yellow' && worst === 'green') worst = 'yellow';
+    });
+    var msg = safetyNetFor(worst);
+    if (!msg) return '';
+    var cls = worst === 'red'
+      ? 'bg-red-50 border-rescue text-rescuedeep'
+      : 'bg-amber-50 border-amber-400 text-amber-900';
+    var icon = worst === 'red' ? '🚑' : '⚠️';
+    return '<div class="border-l-4 ' + cls + ' rounded-r-lg px-4 py-3 mb-4 text-sm">' +
+      '<span class="mr-1">' + icon + '</span><strong>Automatic safety net:</strong> ' + esc(msg) + '</div>';
+  }
+
+  function bindCopyButtons(scope){
+    scope.querySelectorAll('.copy-btn').forEach(function(btn){
+      if (btn.dataset.bound) return;
+      btn.dataset.bound = '1';
+      btn.addEventListener('click', function(){ copyText(btn.getAttribute('data-cmd'), btn); });
+    });
+  }
+
+  /* ---------------- Triage wizard ---------------- */
+  var triage = { committed: null, pushed: null };
+
+  function renderTriage(){
+    var hint = $('triage-hint'), out = $('triage-result');
+    if (!triage.committed || !triage.pushed){
+      hint.classList.remove('hidden');
+      out.classList.add('hidden');
+      out.innerHTML = '';
+      return;
+    }
+    var r = triageFlow(triage.committed, triage.pushed);
+    var info = severityInfo(r.severity);
+    var allCmds = r.steps.map(function(s){ return s.cmd; }).join('\n');
+    var html = '<div class="rounded-xl border border-ink/10 bg-kit p-4 sm:p-6">' +
+      '<div class="flex items-center gap-3 flex-wrap mb-2">' +
+        '<h3 class="font-display text-2xl font-semibold tracking-wide">YOUR PRESCRIPTION</h3>' + pillHTML(r.severity) +
+      '</div>' +
+      '<p class="font-semibold text-ink mb-1">' + esc(r.title) + '</p>' +
+      '<p class="text-sm text-ink/70 mb-4">' + esc(r.summary) + '</p>' +
+      safetyBanner(r.steps);
+    if (r.caution){
+      html += '<div class="border-l-4 border-amber-400 bg-amber-50 rounded-r-lg px-4 py-3 mb-4 text-sm text-amber-900"><strong>Caution:</strong> ' + esc(r.caution) + '</div>';
+    }
+    html += '<ol class="list-none">' + r.steps.map(function(s, i){
+      return '<li class="mb-1"><div class="flex items-center gap-2 mb-1"><span class="text-[11px] font-bold text-ink/40 tracking-widest">STEP ' + (i+1) + '</span></div>' + cmdRow(s) + '</li>';
+    }).join('') + '</ol>' +
+      '<button type="button" id="copy-all-triage" data-label="Copy all commands" class="mt-2 text-sm font-bold bg-teal2 hover:bg-teal-700 text-white rounded-lg px-4 py-2 transition">Copy all commands</button>' +
+      '<p class="text-xs text-ink/50 mt-3">Run these in your terminal, top to bottom. Re-check <span class="font-mono">git status</span> after any step that feels wrong.</p>' +
+    '</div>';
+    out.innerHTML = html;
+    out.classList.remove('hidden');
+    hint.classList.add('hidden');
+    bindCopyButtons(out);
+    var ca = $('copy-all-triage');
+    ca.addEventListener('click', function(){ copyText(allCmds, ca); });
+    out.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  function wireQuestion(groupId, key){
+    var group = $(groupId);
+    group.querySelectorAll('button').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        group.querySelectorAll('button').forEach(function(b){ b.setAttribute('aria-pressed', 'false'); });
+        btn.setAttribute('aria-pressed', 'true');
+        triage[key] = btn.getAttribute('data-val');
+        renderTriage();
+      });
+    });
+  }
+  wireQuestion('q-committed', 'committed');
+  wireQuestion('q-pushed', 'pushed');
+
+  /* ---------------- Panic button flows ---------------- */
+  var panicState = { kind: null, done: {} };
+
+  function renderPanic(){
+    var host = $('panic-flow');
+    if (!panicState.kind){ host.classList.add('hidden'); host.innerHTML = ''; return; }
+    var r = reflogRecipe(panicState.kind);
+    if (!r){ host.classList.add('hidden'); return; }
+    var total = r.steps.length;
+    var doneCount = r.steps.filter(function(s, i){ return panicState.done[panicState.kind + ':' + i]; }).length;
+    var pct = total ? Math.round(doneCount / total * 100) : 0;
+
+    var html = '<div class="rounded-xl border-2 border-rescue/30 bg-kit p-4 sm:p-6">' +
+      '<div class="flex items-start gap-3 flex-wrap mb-2">' +
+        '<h3 class="font-display text-2xl font-semibold tracking-wide text-rescue">' + esc(r.title).toUpperCase() + '</h3>' +
+        '<button type="button" id="panic-close" class="ml-auto text-xs font-bold text-ink/50 hover:text-rescue border border-ink/15 rounded px-2.5 py-1">Close</button>' +
+      '</div>' +
+      '<p class="text-sm text-ink/70 mb-3">' + esc(r.description) + '</p>' +
+      '<div class="border-l-4 border-rescue bg-red-50 rounded-r-lg px-4 py-3 mb-4 text-sm text-rescuedeep"><strong>🛑 ' + esc(r.rule) + '</strong></div>' +
+      '<div class="mb-4"><div class="flex justify-between text-[11px] font-bold tracking-widest text-ink/50 mb-1"><span>RESCUE PROGRESS</span><span>' + doneCount + '/' + total + '</span></div>' +
+      '<div class="h-2.5 bg-ink/10 rounded-full overflow-hidden"><div class="h-full bg-teal2 rounded-full transition-all" style="width:' + pct + '%"></div></div></div>' +
+      '<ol class="space-y-3">' + r.steps.map(function(s, i){
+        var key = panicState.kind + ':' + i;
+        var done = !!panicState.done[key];
+        return '<li class="check-step bg-white rounded-lg border p-3 sm:p-4 ' + (done ? 'done border-teal2/50' : 'border-ink/10') + '">' +
+          '<label class="flex items-start gap-3 cursor-pointer">' +
+            '<input type="checkbox" data-step="' + i + '" ' + (done ? 'checked' : '') + ' class="panic-check mt-1 w-4 h-4 accent-[#1B998B]">' +
+            '<span class="flex-1"><span class="step-title font-bold text-sm">Step ' + (i+1) + '</span>' +
+            '<span class="block text-xs text-ink/65 mt-0.5">' + esc(s.why) + '</span></span>' +
+          '</label>' +
+          '<div class="mt-2 pl-7">' + cmdRow(s) + '</div>' +
+        '</li>';
+      }).join('') + '</ol>';
+    if (r.verify){
+      html += '<div class="mt-4 text-sm bg-teal2/10 border border-teal2/40 rounded-lg px-4 py-3 text-teal-900"><strong>Verify:</strong> ' + esc(r.verify) + '</div>';
+    }
+    if (r.caution){
+      html += '<div class="mt-3 text-sm bg-amber-50 border border-amber-300 rounded-lg px-4 py-3 text-amber-900"><strong>Note:</strong> ' + esc(r.caution) + '</div>';
+    }
+    html += '<button type="button" id="panic-restart" class="mt-4 text-xs font-bold text-ink/50 hover:text-rescue underline">Restart this recipe</button></div>';
+
+    host.innerHTML = html;
+    host.classList.remove('hidden');
+    bindCopyButtons(host);
+
+    host.querySelectorAll('.panic-check').forEach(function(cb){
+      cb.addEventListener('change', function(){
+        var key = panicState.kind + ':' + cb.getAttribute('data-step');
+        if (cb.checked) panicState.done[key] = true; else delete panicState.done[key];
+        renderPanic();
+      });
+    });
+    $('panic-close').addEventListener('click', function(){ panicState.kind = null; renderPanic(); });
+    $('panic-restart').addEventListener('click', function(){
+      Object.keys(panicState.done).forEach(function(k){
+        if (k.indexOf(panicState.kind + ':') === 0) delete panicState.done[k];
+      });
+      renderPanic();
+    });
+    host.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  $('panic-buttons').querySelectorAll('button').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      panicState.kind = btn.getAttribute('data-kind');
+      renderPanic();
+    });
+  });
+
+  /* ---------------- Scenario grid + modal ---------------- */
+  var sevColor = { red: '#D7263D', yellow: '#D9A400', green: '#1B998B' };
+
+  function scenarioCard(s){
+    return '<button type="button" data-scenario="' + esc(s.id) + '" class="tag-card scenario-card text-left bg-white rounded-xl shadow-md border border-ink/10 overflow-hidden hover:shadow-xl hover:-translate-y-0.5 transition flex">' +
+      '<div class="tag-stripe w-10 shrink-0 flex flex-col items-center pt-4 gap-2" style="background:' + sevColor[s.severity] + '22">' +
+        '<span class="tag-hole"></span>' +
+        '<span class="w-3.5 h-3.5 rounded-full" style="background:' + sevColor[s.severity] + '"></span>' +
+      '</div>' +
+      '<div class="p-4 flex-1">' +
+        '<div class="mb-1.5">' + pillHTML(s.severity) + '</div>' +
+        '<h3 class="font-display text-xl font-semibold tracking-wide leading-tight">' + esc(s.title) + '</h3>' +
+        '<p class="text-xs text-ink/60 mt-1.5 leading-relaxed">' + esc(s.symptom) + '</p>' +
+        '<span class="inline-block mt-3 text-xs font-bold text-rescue tracking-wide">OPEN FIX FLOW →</span>' +
+      '</div></button>';
+  }
+
+  function renderGrid(filter){
+    var grid = $('scenario-grid');
+    var q = (filter || '').toLowerCase().trim();
+    var list = scenarioData().filter(function(s){
+      if (!q) return true;
+      return (s.title + ' ' + s.symptom + ' ' + s.id).toLowerCase().indexOf(q) !== -1;
+    });
+    grid.innerHTML = list.map(scenarioCard).join('');
+    $('no-scenarios').classList.toggle('hidden', list.length > 0);
+    grid.querySelectorAll('[data-scenario]').forEach(function(card){
+      card.addEventListener('click', function(){ openScenario(card.getAttribute('data-scenario')); });
+    });
+  }
+  renderGrid('');
+
+  $('scenario-search').addEventListener('input', function(e){ renderGrid(e.target.value); });
+
+  /* Recently viewed (localStorage) */
+  var RV_KEY = 'gitaid-recent-v1';
+  function getRecent(){
+    try {
+      var raw = localStorage.getItem(RV_KEY);
+      var arr = raw ? JSON.parse(raw) : [];
+      return Array.isArray(arr) ? arr : [];
+    } catch(e){ return []; }
+  }
+  function pushRecent(id){
+    try {
+      var arr = getRecent().filter(function(x){ return x !== id; });
+      arr.unshift(id);
+      localStorage.setItem(RV_KEY, JSON.stringify(arr.slice(0, 6)));
+    } catch(e){}
+    renderRecent();
+  }
+  function renderRecent(){
+    var arr = getRecent().map(getScenario).filter(Boolean);
+    var host = $('recently-viewed');
+    if (!arr.length){ host.classList.add('hidden'); return; }
+    host.classList.remove('hidden');
+    $('recent-chips').innerHTML = arr.map(function(s){
+      return '<button type="button" data-recent="' + esc(s.id) + '" class="text-xs font-semibold bg-white border border-rescue/30 text-rescue rounded-full px-3 py-1.5 hover:bg-rescue hover:text-white transition">' + esc(s.title) + '</button>';
+    }).join('');
+    $('recent-chips').querySelectorAll('[data-recent]').forEach(function(chip){
+      chip.addEventListener('click', function(){ openScenario(chip.getAttribute('data-recent')); });
+    });
+  }
+  renderRecent();
+
+  /* Modal */
+  var modalDone = {};
+  function openScenario(id){
+    var s = getScenario(id);
+    if (!s) return;
+    pushRecent(id);
+    var total = s.steps.length;
+    var doneCount = s.steps.filter(function(st, i){ return modalDone[id + ':' + i]; }).length;
+    var pct = total ? Math.round(doneCount / total * 100) : 0;
+    var html =
+      '<div class="flex items-start gap-3 mb-2">' +
+        '<div class="w-10 h-10 rounded-xl shrink-0 flex items-center justify-center" style="background:' + sevColor[s.severity] + '">' +
+          '<svg class="w-6 h-6" viewBox="0 0 24 24"><path d="M9 3h6v6h6v6h-6v6H9v-6H3V9h6z" fill="#fff"/></svg>' +
+        '</div>' +
+        '<div class="flex-1"><div class="mb-1">' + pillHTML(s.severity) + '</div>' +
+        '<h3 id="modal-title" class="font-display text-2xl sm:text-3xl font-semibold tracking-wide leading-tight">' + esc(s.title) + '</h3></div>' +
+        '<button type="button" id="modal-close" aria-label="Close" class="text-ink/40 hover:text-rescue text-2xl leading-none px-2">×</button>' +
+      '</div>' +
+      '<p class="text-sm text-ink/70 bg-kit rounded-lg px-4 py-3 mb-4"><strong>You said:</strong> ' + esc(s.symptom) + '</p>' +
+      safetyBanner(s.steps) +
+      '<div class="mb-4"><div class="flex justify-between text-[11px] font-bold tracking-widest text-ink/50 mb-1"><span>FIX PROGRESS</span><span>' + doneCount + '/' + total + '</span></div>' +
+      '<div class="h-2.5 bg-ink/10 rounded-full overflow-hidden"><div class="h-full bg-rescue rounded-full transition-all" style="width:' + pct + '%"></div></div></div>' +
+      '<ol class="space-y-3">' + s.steps.map(function(st, i){
+        var key = id + ':' + i;
+        var done = !!modalDone[key];
+        return '<li class="check-step bg-kit rounded-lg border p-3 sm:p-4 ' + (done ? 'done border-teal2/50' : 'border-ink/10') + '">' +
+          '<label class="flex items-start gap-3 cursor-pointer">' +
+            '<input type="checkbox" data-step="' + i + '" ' + (done ? 'checked' : '') + ' class="modal-check mt-1 w-4 h-4 accent-[#D7263D]">' +
+            '<span class="step-title font-bold text-sm flex-1">Step ' + (i+1) + '</span>' +
+          '</label>' +
+          '<div class="mt-2 pl-7">' + cmdRow(st) + '</div>' +
+        '</li>';
+      }).join('') + '</ol>';
+    if (s.caution){
+      html += '<div class="mt-4 text-sm bg-amber-50 border border-amber-300 rounded-lg px-4 py-3 text-amber-900"><strong>⚠️ Caution:</strong> ' + esc(s.caution) + '</div>';
+    }
+    if (s.prevention){
+      html += '<div class="mt-3 text-sm bg-teal2/10 border border-teal2/40 rounded-lg px-4 py-3 text-teal-900"><strong>🛡️ Prevent next time:</strong> ' + esc(s.prevention) + '</div>';
+    }
+    $('modal-body').innerHTML = html;
+    $('modal').classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+    bindCopyButtons($('modal-body'));
+    $('modal-close').addEventListener('click', closeModal);
+    $('modal-body').querySelectorAll('.modal-check').forEach(function(cb){
+      cb.addEventListener('change', function(){
+        var key = id + ':' + cb.getAttribute('data-step');
+        if (cb.checked) modalDone[key] = true; else delete modalDone[key];
+        openScenarioKeep(id);
+      });
+    });
+  }
+
+  /* Re-render modal without pushing to recently-viewed again */
+  function openScenarioKeep(id){
+    var recent = getRecent();
+    var keepBody = $('modal-body');
+    openScenarioNoRec(id);
+    function openScenarioNoRec(sid){
+      var s = getScenario(sid);
+      if (!s) return;
+      var total = s.steps.length;
+      var doneCount = s.steps.filter(function(st, i){ return modalDone[sid + ':' + i]; }).length;
+      var pct = total ? Math.round(doneCount / total * 100) : 0;
+      var html =
+        '<div class="flex items-start gap-3 mb-2">' +
+          '<div class="w-10 h-10 rounded-xl shrink-0 flex items-center justify-center" style="background:' + sevColor[s.severity] + '">' +
+            '<svg class="w-6 h-6" viewBox="0 0 24 24"><path d="M9 3h6v6h6v6v-6h6v-6h-6V3H9v6H3v6h6z" fill="#fff"/></svg>' +
+          '</div>' +
+          '<div class="flex-1"><div class="mb-1">' + pillHTML(s.severity) + '</div>' +
+          '<h3 id="modal-title" class="font-display text-2xl sm:text-3xl font-semibold tracking-wide leading-tight">' + esc(s.title) + '</h3></div>' +
+          '<button type="button" id="modal-close" aria-label="Close" class="text-ink/40 hover:text-rescue text-2xl leading-none px-2">×</button>' +
+        '</div>' +
+        '<p class="text-sm text-ink/70 bg-kit rounded-lg px-4 py-3 mb-4"><strong>You said:</strong> ' + esc(s.symptom) + '</p>' +
+        safetyBanner(s.steps) +
+        '<div class="mb-4"><div class="flex justify-between text-[11px] font-bold tracking-widest text-ink/50 mb-1"><span>FIX PROGRESS</span><span>' + doneCount + '/' + total + '</span></div>' +
+        '<div class="h-2.5 bg-ink/10 rounded-full overflow-hidden"><div class="h-full bg-rescue rounded-full transition-all" style="width:' + pct + '%"></div></div></div>' +
+        '<ol class="space-y-3">' + s.steps.map(function(st, i){
+          var key = sid + ':' + i;
+          var done = !!modalDone[key];
+          return '<li class="check-step bg-kit rounded-lg border p-3 sm:p-4 ' + (done ? 'done border-teal2/50' : 'border-ink/10') + '">' +
+            '<label class="flex items-start gap-3 cursor-pointer">' +
+              '<input type="checkbox" data-step="' + i + '" ' + (done ? 'checked' : '') + ' class="modal-check mt-1 w-4 h-4 accent-[#D7263D]">' +
+              '<span class="step-title font-bold text-sm flex-1">Step ' + (i+1) + '</span>' +
+            '</label>' +
+            '<div class="mt-2 pl-7">' + cmdRow(st) + '</div>' +
+          '</li>';
+        }).join('') + '</ol>';
+      if (s.caution){
+        html += '<div class="mt-4 text-sm bg-amber-50 border border-amber-300 rounded-lg px-4 py-3 text-amber-900"><strong>⚠️ Caution:</strong> ' + esc(s.caution) + '</div>';
+      }
+      if (s.prevention){
+        html += '<div class="mt-3 text-sm bg-teal2/10 border border-teal2/40 rounded-lg px-4 py-3 text-teal-900"><strong>🛡️ Prevent next time:</strong> ' + esc(s.prevention) + '</div>';
+      }
+      keepBody.innerHTML = html;
+      bindCopyButtons(keepBody);
+      $('modal-close').addEventListener('click', closeModal);
+      keepBody.querySelectorAll('.modal-check').forEach(function(cb){
+        cb.addEventListener('change', function(){
+          var key = sid + ':' + cb.getAttribute('data-step');
+          if (cb.checked) modalDone[key] = true; else delete modalDone[key];
+          openScenarioNoRec(sid);
+        });
+      });
+    }
+    openScenarioNoRec(id);
+    try { localStorage.setItem(RV_KEY, JSON.stringify(recent)); } catch(e){}
+  }
+
+  function closeModal(){
+    $('modal').classList.add('hidden');
+    document.body.style.overflow = '';
+  }
+  $('modal-backdrop').addEventListener('click', closeModal);
+  document.addEventListener('keydown', function(e){
+    if (e.key === 'Escape' && !$('modal').classList.contains('hidden')) closeModal();
+  });
+})();
+</script>
+</body>
+</html>
